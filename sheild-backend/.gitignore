@@ -1,0 +1,12 @@
+target/
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.idea/
+*.iml
+*.iws
+.DS_Store
+*.class
+src/main/resources/serviceAccountKey.json
+run.log

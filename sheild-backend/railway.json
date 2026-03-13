@@ -1,0 +1,12 @@
+{
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "port": 8080,
+    "restartPolicyType": "ON_FAILURE",
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 300
+  }
+}

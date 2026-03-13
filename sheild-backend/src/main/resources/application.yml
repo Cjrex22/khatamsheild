@@ -1,0 +1,18 @@
+server:
+  port: 8080
+firebase:
+  service-account-key: ${FIREBASE_SERVICE_ACCOUNT_KEY:classpath:serviceAccountKey.json}
+  project-id: ${FIREBASE_PROJECT_ID:sheild-app}
+  storage-bucket: ${FIREBASE_STORAGE_BUCKET:sheild-app.appspot.com}
+cors:
+  allowed-origins: http://localhost:5173,${FRONTEND_URL:https://sheild-app-prod-1234.web.app},https://sheild-app-prod-1234.web.app,https://sheild-app-prod-1234.firebaseapp.com
+spring:
+  application:
+    name: sheild-backend
+  web:
+    resources:
+      static-locations: classpath:/static/
+      cache:
+        period: 0
+  mvc:
+    static-path-pattern: /**

@@ -1,0 +1,138 @@
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { auth } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useAuthStore } from './stores/authStore';
+import { api } from './lib/api';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { db } from './lib/firebase';
+import { useNotificationStore } from './stores/notificationStore';
+import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
+
+import WelcomePage from './pages/auth/WelcomePage';
+import SignUpPage from './pages/auth/SignUpPage';
+import ProfileSetupPage from './pages/auth/ProfileSetupPage';
+import SignInPage from './pages/auth/SignInPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+
+import DashboardPage from './pages/DashboardPage';
+import CirclePage from './pages/CirclePage';
+import MapPage from './pages/MapPage';
+import SettingsPage from './pages/SettingsPage';
+import BottomNav from './components/BottomNav';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuthStore();
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <Navigate to="/auth/welcome" />;
+  return <>{children}</>;
+}
+
+function AuthRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuthStore();
+  if (loading) return <div>Loading...</div>;
+  if (user) return <Navigate to="/dashboard" />;
+  return <>{children}</>;
+}
+
+function App() {
+  const { setUser, setProfile, clearUser } = useAuthStore();
+
+  // PWA install prompt capture
+  useEffect(() => {
+    const { setDeferredPrompt, setInstalled } = usePwaStore.getState();
+
+    // Check if already running as installed PWA
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setInstalled(true);
+    }
+
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+
+    const handleAppInstalled = () => {
+      setInstalled(true);
+      usePwaStore.getState().clearPrompt();
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        try {
+          const profile = await api.get('/auth/profile');
+          setProfile(profile);
+        } catch (e) {
+          // profile load failed silently
+        }
+      } else {
+        clearUser();
+      }
+    });
+    return unsub;
+  }, [setUser, setProfile, clearUser]);
+
+  useEffect(() => {
+    const { user } = useAuthStore.getState();
+    let unsubNotifs: () => void;
+
+    if (user) {
+      const q = query(
+        collection(db, 'notifications', user.uid, 'items'),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+      );
+      unsubNotifs = onSnapshot(q, (snap) => {
+        const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+        useNotificationStore.getState().setItems(items);
+      });
+    }
+
+    return () => {
+      if (unsubNotifs) unsubNotifs();
+    };
+  }, [useAuthStore.getState().user]);
+
+  return (
+    <BrowserRouter>
+      <Toaster position="top-center" toastOptions={{
+        style: {
+          background: 'var(--c-surface)',
+          color: 'var(--c-text-1)',
+          border: '1px solid var(--c-border)',
+        }
+      }} />
+      <Routes>
+        <Route path="/" element={<Navigate to="/auth/welcome" replace />} />
+
+        {/* Auth Routes */}
+        <Route path="/auth/welcome" element={<AuthRoute><WelcomePage /></AuthRoute>} />
+        <Route path="/auth/signup" element={<AuthRoute><SignUpPage /></AuthRoute>} />
+        <Route path="/auth/profile-setup" element={<ProtectedRoute><ProfileSetupPage /></ProtectedRoute>} />
+        <Route path="/auth/signin" element={<AuthRoute><SignInPage /></AuthRoute>} />
+        <Route path="/auth/forgot-password" element={<AuthRoute><ForgotPasswordPage /></AuthRoute>} />
+
+        {/* Protected Routes */}
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/circle" element={<ProtectedRoute><CirclePage /></ProtectedRoute>} />
+        <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      </Routes>
+      <BottomNav />
+    </BrowserRouter>
+  );
+}
+
+export default App;
