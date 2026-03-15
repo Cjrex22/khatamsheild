@@ -21,6 +21,7 @@ import CirclePage from './pages/CirclePage';
 import MapPage from './pages/MapPage';
 import SettingsPage from './pages/SettingsPage';
 import BottomNav from './components/BottomNav';
+import SafeZonesPage from './pages/SafeZonesPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -128,6 +129,7 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/circle" element={<ProtectedRoute><CirclePage /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
+        <Route path="/safe-zones" element={<ProtectedRoute><SafeZonesPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       </Routes>
       <BottomNav />

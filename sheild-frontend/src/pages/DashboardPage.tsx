@@ -252,8 +252,8 @@ export default function DashboardPage() {
                     </button>
                 </div>
 
-                <div className="flex gap-4">
-                    <button onClick={shareLocation} disabled={isLocationLoading} className={`flex-1 bg-surface border border-border rounded-[20px] p-4 flex flex-col gap-3 items-start transition-colors ${isLocationLoading ? 'opacity-70' : 'hover:bg-surface-2'}`}>
+                <div className="grid grid-cols-3 gap-4">
+                    <button onClick={shareLocation} disabled={isLocationLoading} className={`bg-surface border border-border rounded-[20px] p-4 flex flex-col gap-3 items-start transition-colors ${isLocationLoading ? 'opacity-70' : 'hover:bg-surface-2'}`}>
                         <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center text-primary">
                             {isLocationLoading ? <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> : <MapPin size={20} />}
                         </div>
@@ -263,13 +263,23 @@ export default function DashboardPage() {
                         </div>
                     </button>
 
-                    <button disabled className="flex-1 bg-surface-2 border border-border/50 rounded-[20px] p-4 flex flex-col gap-3 items-start opacity-40 cursor-not-allowed">
+                    <button disabled className="bg-surface-2 border border-border/50 rounded-[20px] p-4 flex flex-col gap-3 items-start opacity-40 cursor-not-allowed">
                         <div className="w-10 h-10 rounded-full flex items-center justify-center bg-surface-3 text-text-3">
                             <Mic size={20} />
                         </div>
                         <div>
                             <h3 className="text-text-3 font-semibold mb-0.5">Evidence Rec</h3>
                             <p className="text-[11px] text-text-3">Currently disabled</p>
+                        </div>
+                    </button>
+
+                    <button onClick={() => navigate('/safe-zones')} className="bg-surface-2 rounded-[20px] p-4 flex flex-col items-start gap-3 border border-border hover:border-primary/40 active:scale-95 transition-all">
+                        <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center text-primary">
+                            <ShieldCheck size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-white font-semibold mb-0.5">Safe Zones</h3>
+                            <p className="text-[11px] text-text-3">Nearest police & hospitals</p>
                         </div>
                     </button>
                 </div>

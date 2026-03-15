@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Users, Map as MapIcon, Settings } from 'lucide-react';
+import { Home, Users, Map as MapIcon, Settings, ShieldCheck } from 'lucide-react';
 
 export default function BottomNav() {
     const location = useLocation();
@@ -11,6 +11,7 @@ export default function BottomNav() {
         { path: '/dashboard', label: 'Home', icon: Home },
         { path: '/circle', label: 'Circle', icon: Users },
         { path: '/map', label: 'Map', icon: MapIcon },
+        { path: '/safe-zones', label: 'Safe', icon: ShieldCheck },
         { path: '/settings', label: 'Settings', icon: Settings },
     ];
 
@@ -21,7 +22,7 @@ export default function BottomNav() {
                     const Icon = tab.icon;
                     const isActive = currentPath === tab.path;
                     return (
-                        <Link key={tab.path} to={tab.path} className="flex flex-col items-center justify-center w-16 h-full relative gap-1">
+                        <Link key={tab.path} to={tab.path} className="flex flex-col items-center justify-center w-14 h-full relative gap-1">
                             <Icon size={24} className={isActive ? 'text-primary' : 'text-text-3'} strokeWidth={isActive ? 2.5 : 2} />
                             <span className={`text-[10px] font-medium transition-colors ${isActive ? 'text-primary' : 'text-text-3'}`}>{tab.label}</span>
                             {isActive && <div className="absolute top-1 w-1 h-1 rounded-full bg-primary" />}
