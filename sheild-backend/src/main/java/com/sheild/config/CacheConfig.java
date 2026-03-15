@@ -14,10 +14,19 @@ public class CacheConfig {
     @Bean
     public CacheManager cacheManager() {
         CaffeineCacheManager manager = new CaffeineCacheManager();
+
         manager.registerCustomCache("geocodeCache",
-            Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).maximumSize(100).build());
+            Caffeine.newBuilder()
+                .expireAfterWrite(60, TimeUnit.SECONDS)
+                .maximumSize(100)
+                .build());
+
         manager.registerCustomCache("safeZoneCache",
-            Caffeine.newBuilder().expireAfterWrite(24, TimeUnit.HOURS).maximumSize(500).build());
+            Caffeine.newBuilder()
+                .expireAfterWrite(24, TimeUnit.HOURS)
+                .maximumSize(500)
+                .build());
+
         return manager;
     }
 }
