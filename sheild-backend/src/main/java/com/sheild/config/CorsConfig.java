@@ -22,8 +22,10 @@ public class CorsConfig {
         if (railwayUrl != null && !railwayUrl.startsWith("http")) railwayUrl = "https://" + railwayUrl;
 
         config.setAllowedOrigins(java.util.Arrays.asList(
-            "http://localhost:5173", 
-            "http://localhost:4173", 
+            "http://localhost:5173",
+            "http://localhost:4173",
+            "https://sheild-app-prod-1234.web.app",
+            "https://sheild-app-prod-1234.firebaseapp.com",
             frontendUrl,
             railwayUrl
         ).stream().filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toList()));
