@@ -1,0 +1,16 @@
+FIREBASE_PROJECT_ID: "sheild-app-prod-1234"
+FRONTEND_URL: "https://sheild-app-prod-1234.web.app"
+FIREBASE_SERVICE_ACCOUNT_KEY_JSON: |
+  {
+    "type": "service_account",
+    "project_id": "sheild-app-prod-1234",
+    "private_key_id": "b0746adc4f6b90bd469aaec675c33c51b3aa3756",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZgUMI7yK8/4pk\n+YqbZvNqkG920nwTnrZ2Ov+dvvJelc3gkVyVPq7DIdDS/TqItMuH6h3aeP6oYzd/\nSRhzvhZufDj/zmFf43Y8c6g+f9HTixg2LwxtwjhgoHEVpBHvN1H6bh73tpaUNzus\nqRX7ZSmzrw23Y97AseIOPbt+JmzipcXorICNMiGEwGso7UOWhWVILuH1RY3uhA69\nZp5jFpdSsRu2yWgHTFmqE448jjmRjJpBjELvIbWmOXO3l4aFjAqRfIyIwEkdu6A7\nlLe1n2P38DbsUZ5GBvLFxlsZBlGXuHGp5k+6vZw3+v5CETvOeBZHJMNU/cg9IlQS\nnYlBNmezAgMBAAECggEAAJhyANMdpBbTlr6cuolVnv0RrHvkwe2Qvb/XB+Qag3xa\nFRa+giWGW9Joc2JJh+G21hT/JsjU4INuK3edeqqAR4G6/RO7ks1ZMhgIHL8fIIP/\n1PhuSpDsaymXk2HgwYyfgoyWD/nX/7IrloMkkfp87Qa6PSwDHK9f/exGfNnuFKwy\nythL59hHIdIKKHEEH97hUvNrhtJl3gA0nJ4kxrAbuCdMb2+Lpvh+RA6J0E34ik9z\nrk/+V+s1xOwdTKW9jj8DAjtimhJZX/r4S0Ck/JfsNo2oagzrmopfib/31QGOcrZb\nffPlt/8f2q93OHfNrzFpCyhd2l6Ribuo9FhSU3wtgQKBgQD98hhfTRtHMrKZ8/zT\nohbSalCcGVjMmL3hi6JRJ0jJIy9Pm5snjd3FJ5j7CJtwNyYcG7Sv0egZgsecDH5V\ng/ECzGRMG14T6Zf3mkoYYgLoTXNBN6pIAup8/L4sXDV+mOzpsxl9qhtioHg91ktV\nYqW2ZI4r8uscibbZuLAXGKlRqQKBgQDbQ7NDSm0aLiPcV4tZfgFAWy0VASDEBv7H\nvVNvGr708iGRlK+NmQVGRdDFxWB1yuvN+XdAFHyAOtio7OA9QTQk+e8c7AbeuIn+\nU1DNqYyoPDNtJ1Xk5CnM2Glj+MvlXQjLML3MgmLYb7d4xTdqTICCIcyWvZlTODue\nN37VFXz/+wKBgQDpuQ4ReIgoqVKUO2lw5vgWRV9XrER8WgA5PCjyhDOLW+TJYjAU\n4Y9BS8aTFULqrvdWW3GbeJgkEqfgyebkkgEaUD/nhDC8JvyFGO4lLt/6Kn5vgeop\nSPXEf2IQtfVORTWXig1mCVAXIBZK45aGSbq2+imX7YXSyDUQgdkgCMSdsQKBgQCq\nZdODYOym4uKlkzdNRhpM3E6Nu0Gudc08hsq3Vm6+RwmFbKp9fUTXFtynRbuv7xIQ\nEWX2W7VhpdnIdcXSdMDEV6PWsyqnnXxINJFgMvqHp7lDg8VBy3scobZNpgU263Ux\nC2EE9PNCRper+IAXUPqxpviq0Q+9176lN3WOvVNWTwKBgECTQBs9LU8PJUPqcCD2\nLRWpwXnPvMiENiGlOuDNEdDDUlqcxJ4s7ixJwPQ7r/5ca+IDJiNkabMuuXXAStg+\npuIdJP/lvAy67D+wfqsdE20phGJddLUmjubCdmn05FbJOo0GN2eG8KuwaD1HsKxb\n29To59sF3fRAYbfct+IADLfD\n-----END PRIVATE KEY-----\n",
+    "client_email": "sheild-backend-sa@sheild-app-prod-1234.iam.gserviceaccount.com",
+    "client_id": "100397105652992807694",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/sheild-backend-sa%40sheild-app-prod-1234.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com"
+  }

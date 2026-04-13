@@ -4,6 +4,9 @@ import com.google.firebase.messaging.AndroidConfig;
 import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.MulticastMessage;
+import com.google.firebase.messaging.Notification;
+import com.google.firebase.messaging.WebpushConfig;
+import com.google.firebase.messaging.WebpushNotification;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -27,6 +30,11 @@ public class FcmService {
                   .setPriority("sos".equals(type) ?
                     AndroidConfig.Priority.HIGH : AndroidConfig.Priority.NORMAL)
                   .build())
+                .setWebpushConfig(WebpushConfig.builder()
+                    .setNotification(WebpushNotification.builder()
+                        .setIcon("https://sheild-app-prod-1234.web.app/sheild-pwa-192.png")
+                        .build())
+                    .build())
                 .build();
 
             BatchResponse response = FirebaseMessaging.getInstance()
