@@ -4,7 +4,6 @@ import com.google.firebase.messaging.AndroidConfig;
 import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.MulticastMessage;
-import com.google.firebase.messaging.Notification;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,9 +18,11 @@ public class FcmService {
         try {
             MulticastMessage message = MulticastMessage.builder()
                 .addAllTokens(tokens)
-                .setNotification(Notification.builder()
-                  .setTitle(title).setBody(body).build())
                 .putAllData(data)
+                .setNotification(com.google.firebase.messaging.Notification.builder()
+                    .setTitle(title)
+                    .setBody(body)
+                    .build())
                 .setAndroidConfig(AndroidConfig.builder()
                   .setPriority("sos".equals(type) ?
                     AndroidConfig.Priority.HIGH : AndroidConfig.Priority.NORMAL)
