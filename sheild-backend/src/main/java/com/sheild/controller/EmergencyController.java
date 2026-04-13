@@ -158,6 +158,8 @@ public class EmergencyController {
         Map<String, String> data = new HashMap<>();
         data.put("type", type);
         data.put("fromUid", uid);
+        data.put("title", title);
+        data.put("body", message);
         if (sessionId != null) data.put("sessionId", sessionId);
         
         fcmService.sendToTokens(tokens, type, title, message, data);
