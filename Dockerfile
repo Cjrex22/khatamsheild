@@ -20,6 +20,24 @@ RUN mvn dependency:go-offline -q
 # Copy backend source
 COPY sheild-backend/src ./src
 
+# Warn at build time if serviceAccountKey.json is absent (not committed to git).
+# The app will still build, but FIREBASE_SERVICE_ACCOUNT_KEY_JSON MUST be set
+# on the deployment platform (Render → Environment Variables) or the app will
+# refuse to start with a clear error message.
+RUN if [ -f "src/main/resources/serviceAccountKey.json" ]; then \
+      echo "========================================================"; \
+      echo "INFO: serviceAccountKey.json found in build context."; \
+      echo "Firebase credentials will be embedded in the JAR."; \
+      echo "========================================================"; \
+    else \
+      echo "========================================================"; \
+      echo "WARNING: serviceAccountKey.json NOT found in build context."; \
+      echo "Firebase credentials will NOT be embedded in the JAR."; \
+      echo "YOU MUST set FIREBASE_SERVICE_ACCOUNT_KEY_JSON env var on"; \
+      echo "Render (Dashboard -> Environment) or the app will fail."; \
+      echo "========================================================"; \
+    fi
+
 # Copy frontend build output to backend static resources
 COPY --from=frontend-builder /frontend/dist ./src/main/resources/static/
 

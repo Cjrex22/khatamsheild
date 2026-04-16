@@ -30,20 +30,40 @@ public class FirebaseConfig {
         InputStream serviceAccount;
         String keyJson = System.getenv("FIREBASE_SERVICE_ACCOUNT_KEY_JSON");
         if (keyJson != null && !keyJson.trim().isEmpty()) {
+            // Normalize \n: Render/Docker env vars sometimes store literal backslash-n
+            // instead of real newlines inside the private_key field. Fix both directions.
+            keyJson = keyJson.replace("\\n", "\n");
             serviceAccount = new ByteArrayInputStream(keyJson.getBytes(StandardCharsets.UTF_8));
-        } else {
+            System.out.println("[Firebase] ✅ Credentials loaded from FIREBASE_SERVICE_ACCOUNT_KEY_JSON env var.");
+        } else if (serviceAccountKey.exists()) {
             serviceAccount = serviceAccountKey.getInputStream();
+            System.out.println("[Firebase] ✅ Credentials loaded from classpath:serviceAccountKey.json.");
+        } else {
+            String msg =
+                "FATAL: No Firebase credentials found. " +
+                "Neither FIREBASE_SERVICE_ACCOUNT_KEY_JSON env var is set, " +
+                "nor does classpath:serviceAccountKey.json exist in the JAR. " +
+                "→ On Render: go to Dashboard → Environment and add the full " +
+                "serviceAccountKey.json content as FIREBASE_SERVICE_ACCOUNT_KEY_JSON. " +
+                "→ Locally: ensure sheild-backend/src/main/resources/serviceAccountKey.json exists.";
+            System.err.println("[Firebase] ❌ " + msg);
+            throw new IllegalStateException(msg);
         }
         try {
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(serviceAccount))
                     .setProjectId(System.getenv().getOrDefault("FIREBASE_PROJECT_ID", "sheild-app-prod-1234"))
                     .build();
-            return FirebaseApp.initializeApp(options);
+            FirebaseApp app = FirebaseApp.initializeApp(options);
+            System.out.println("[Firebase] ✅ FirebaseApp initialized for project: " +
+                System.getenv().getOrDefault("FIREBASE_PROJECT_ID", "sheild-app-prod-1234"));
+            return app;
         } catch (Exception e) {
-            System.err.println("CRITICAL: Failed to initialize FirebaseApp: " + e.getMessage());
+            System.err.println("[Firebase] ❌ CRITICAL: Failed to initialize FirebaseApp: " + e.getMessage());
             e.printStackTrace();
-            throw new RuntimeException("Firebase initialization failed fast with a clear message: " + e.getMessage(), e);
+            throw new RuntimeException(
+                "Firebase initialization failed. Check FIREBASE_SERVICE_ACCOUNT_KEY_JSON on Render. " +
+                "Error: " + e.getMessage(), e);
         }
     }
 

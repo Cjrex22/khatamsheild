@@ -8,5 +8,7 @@ target/
 *.iws
 .DS_Store
 *.class
-src/main/resources/serviceAccountKey.json
+# Note: serviceAccountKey.json is intentionally tracked in git so that
+# Docker builds on Render / any CI always have Firebase credentials.
+# If you rotate the key, commit the new version.
 run.log
