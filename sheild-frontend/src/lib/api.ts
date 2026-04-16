@@ -4,8 +4,8 @@ import toast from 'react-hot-toast';
 const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
 
 async function authFetch(path: string, opts: RequestInit = {}) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout
+    const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout for Render cold starts
 
   try {
     const token = await getAuth().currentUser?.getIdToken();

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 
 import { Camera, Check, X, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { getAuth } from 'firebase/auth';
 import toast from 'react-hot-toast';
 
 export default function ProfileSetupPage() {
@@ -28,8 +29,18 @@ export default function ProfileSetupPage() {
         const timer = setTimeout(async () => {
             setCheckingUsername(true);
             try {
-                const { available } = await api.get(`/users/check-username?username=${username}`);
-                setUsernameStatus(available ? 'available' : 'taken');
+                const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+                const token = await getAuth().currentUser?.getIdToken();
+                const res = await fetch(`${base}/users/check-username?username=${username}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setUsernameStatus(data.available ? 'available' : 'taken');
+                } else {
+                    // If check fails, allow submit — backend will enforce uniqueness
+                    setUsernameStatus('idle');
+                }
             } catch (e) {
                 setUsernameStatus('idle');
             } finally {
@@ -47,7 +58,8 @@ export default function ProfileSetupPage() {
         }
     };
 
-    const isFormValid = name.length >= 2 && usernameStatus === 'available' && phone.length >= 7;
+    // Allow submit if username check passed OR if check was inconclusive (idle) — backend enforces uniqueness on save
+    const isFormValid = name.length >= 2 && usernameStatus !== 'taken' && phone.length >= 7;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -143,7 +155,11 @@ export default function ProfileSetupPage() {
 
                     <button type="submit" disabled={!isFormValid || loading}
                         className="w-full h-14 bg-primary text-white font-semibold rounded-full mt-2 disabled:opacity-50 disabled:bg-surface-3 transition-colors shadow-sos">
-                        {loading ? 'Saving...' : 'Create My Account'}
+                        {loading ? 'Saving to Database (Takes ~30s)...' : 
+                         usernameStatus === 'taken' ? 'Username is taken' : 
+                         name.length < 2 ? 'Enter your name' : 
+                         phone.length < 7 ? 'Enter a valid phone number' : 
+                         'Create My Account'}
                     </button>
                 </form>
             </div>

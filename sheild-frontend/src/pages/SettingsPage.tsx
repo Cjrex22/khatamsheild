@@ -138,16 +138,25 @@ export default function SettingsPage() {
     };
 
     const handleEnableNotifications = async () => {
-        const permission = await Notification.requestPermission();
-        setNotifPermission(permission);
-        if (permission === 'granted') {
-            try {
-                // Get token using our service worker in the real implementation
-                // For now just update UI and show toast
-                toast.success("Notifications enabled!");
-            } catch (e) {
-                toast.error("Failed to register token");
+        try {
+            if (!('Notification' in window)) {
+                toast.error("Notifications are not supported in this browser. Try installing the app first.", { duration: 4000 });
+                return;
             }
+            
+            const permission = await Notification.requestPermission();
+            setNotifPermission(permission);
+            if (permission === 'granted') {
+                toast.success("Notifications enabled!");
+                // Explicitly fire token registration so the backend gets the push token
+                import('../lib/fcm').then(module => {
+                    module.registerFcmToken();
+                });
+            } else if (permission === 'denied') {
+                toast.error("Notification permission denied. Please enable in your device settings.");
+            }
+        } catch (e) {
+            toast.error("Failed to request notification permissions.");
         }
     };
 
@@ -286,25 +295,32 @@ export default function SettingsPage() {
                             
                             <div className="bg-surface border border-white/5 rounded-2xl p-4 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-lg ${isInstalled || !deferredPrompt ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-500'}`}>
-                                        {isInstalled || !deferredPrompt ? <CheckCircle2 size={20} /> : <Download size={20} />}
+                                    <div className={`p-2 rounded-lg ${isInstalled ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                                        {isInstalled ? <CheckCircle2 size={20} /> : <Download size={20} />}
                                     </div>
                                     <div>
                                         <p className="text-sm font-bold text-white">
-                                            {isInstalled || !deferredPrompt ? 'App Installed' : 'Install App'}
+                                            {isInstalled ? 'App Installed' : 'Install App'}
                                         </p>
                                         <p className="text-[10px] text-text-3">
-                                            {isInstalled || !deferredPrompt ? 'SHEild is installed on your device' : 'Install SHEild for the best experience'}
+                                            {isInstalled ? 'SHEild is installed on your device' : 'Install SHEild for the best experience'}
                                         </p>
                                     </div>
                                 </div>
-                                {isInstalled || !deferredPrompt ? (
+                                {isInstalled ? (
                                     <CheckCircle2 className="text-green-500" size={20} />
                                 ) : (
                                     <button
                                         onClick={async () => {
-                                            if (!deferredPrompt) return;
-                                            setIsInstalling(true);
+                                            if (!deferredPrompt) {
+                                                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                                                if (isIOS) {
+                                                    toast("Apple requires manual install: Tap Share ⬆️ and 'Add to Home Screen'.", { duration: 6000 });
+                                                } else {
+                                                    toast.success("Tap the 3-dots (⋮) in your browser menu and select 'Install App' or 'Add to Home screen'", { duration: 6000, icon: '📱' });
+                                                }
+                                                return;
+                                            }
                                             try {
                                                 await deferredPrompt.prompt();
                                                 const { outcome } = await deferredPrompt.userChoice;
@@ -316,7 +332,7 @@ export default function SettingsPage() {
                                                     toast('Installation cancelled', { icon: '⚠️' });
                                                 }
                                             } catch (err) {
-                                                toast.error('Installation failed');
+                                                toast.error('Installation failed. Please use your browser menu to install.');
                                             } finally {
                                                 setIsInstalling(false);
                                             }

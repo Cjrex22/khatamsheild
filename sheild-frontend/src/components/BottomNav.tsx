@@ -8,11 +8,11 @@ export default function BottomNav() {
     if (currentPath.startsWith('/auth') || currentPath === '/') return null;
 
     const tabs = [
-        { path: '/dashboard', label: 'Home', icon: Home },
-        { path: '/circle', label: 'Circle', icon: Users },
-        { path: '/map', label: 'Map', icon: MapIcon },
-        { path: '/safe-zones', label: 'Safe', icon: ShieldCheck },
-        { path: '/settings', label: 'Settings', icon: Settings },
+        { path: '/dashboard',  label: 'Home',     icon: Home        },
+        { path: '/circle',     label: 'Circle',   icon: Users       },
+        { path: '/map',        label: 'Map',       icon: MapIcon     },
+        { path: '/safe-zones', label: 'Safe',      icon: ShieldCheck },
+        { path: '/settings',   label: 'Settings',  icon: Settings    },
     ];
 
     return (

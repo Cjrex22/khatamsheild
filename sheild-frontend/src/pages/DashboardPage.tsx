@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useSosStore } from '../stores/sosStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { api } from '../lib/api';
-import { Shield, Bell, MapPin, Mic, ShieldCheck, Phone } from 'lucide-react';
+import { Shield, Bell, MapPin, ShieldCheck, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,6 +11,7 @@ import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import NotificationPanel from '../components/NotificationPanel';
 import QuickDialModal from '../components/QuickDialModal';
+import { registerFcmToken, setupForegroundNotifications } from '../lib/fcm';
 
 export default function DashboardPage() {
     const navigate = useNavigate();
@@ -67,6 +68,12 @@ export default function DashboardPage() {
             setQuickDials(data);
         });
         return () => unsubscribe();
+    }, [profile?.uid]);
+
+    useEffect(() => {
+        if (!profile?.uid) return;
+        registerFcmToken();
+        setupForegroundNotifications();
     }, [profile?.uid]);
 
     const qdPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -137,6 +144,7 @@ export default function DashboardPage() {
         try {
             await api.post('/emergency/safe', { lat: coords.lat, lng: coords.lng, locationName });
             setSosActive(false);
+            setBodyguardActive(false);
             setSessionId(null);
             
             toast.success('Guard Circle notified you are safe');
@@ -252,7 +260,7 @@ export default function DashboardPage() {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                     <button onClick={shareLocation} disabled={isLocationLoading} className={`bg-surface border border-border rounded-[20px] p-4 flex flex-col gap-3 items-start transition-colors ${isLocationLoading ? 'opacity-70' : 'hover:bg-surface-2'}`}>
                         <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center text-primary">
                             {isLocationLoading ? <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> : <MapPin size={20} />}
@@ -263,23 +271,13 @@ export default function DashboardPage() {
                         </div>
                     </button>
 
-                    <button disabled className="bg-surface-2 border border-border/50 rounded-[20px] p-4 flex flex-col gap-3 items-start opacity-40 cursor-not-allowed">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center bg-surface-3 text-text-3">
-                            <Mic size={20} />
-                        </div>
-                        <div>
-                            <h3 className="text-text-3 font-semibold mb-0.5">Evidence Rec</h3>
-                            <p className="text-[11px] text-text-3">Currently disabled</p>
-                        </div>
-                    </button>
-
-                    <button onClick={() => navigate('/safe-zones')} className="bg-surface-2 rounded-[20px] p-4 flex flex-col items-start gap-3 border border-border hover:border-primary/40 active:scale-95 transition-all">
+                    <button onClick={() => navigate('/safe-zones')} className="bg-surface border border-border rounded-[20px] p-4 flex flex-col gap-3 items-start transition-colors hover:bg-surface-2 hover:border-blue-500/40 active:scale-95">
                         <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center text-primary">
                             <ShieldCheck size={20} />
                         </div>
                         <div>
                             <h3 className="text-white font-semibold mb-0.5">Safe Zones</h3>
-                            <p className="text-[11px] text-text-3">Nearest police & hospitals</p>
+                            <p className="text-[11px] text-text-3">Police & hospitals</p>
                         </div>
                     </button>
                 </div>

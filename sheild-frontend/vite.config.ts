@@ -7,7 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'firebase-messaging-sw.js'],
+      workbox: {
+        importScripts: ['firebase-messaging-sw.js'],
+        navigateFallbackDenylist: [/firebase-messaging-sw\.js/],
+        globIgnores: ['firebase-messaging-sw.js']
+      },
       manifest: {
         name: 'SHEild - Digital Bodyguard',
         short_name: 'SHEild',
@@ -15,14 +20,15 @@ export default defineConfig({
         theme_color: '#0F0505',
         background_color: '#0F0505',
         display: 'standalone',
+        start_url: '/',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'sheild-pwa-192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'sheild-pwa-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'

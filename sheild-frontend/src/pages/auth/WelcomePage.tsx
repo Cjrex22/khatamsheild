@@ -14,10 +14,10 @@ export default function WelcomePage() {
             className="min-h-screen w-full flex flex-col items-center justify-center p-6 bg-bg relative overflow-hidden transition-all duration-[3000ms] ease-in-out"
             style={{ background: pulse ? 'radial-gradient(circle at center, var(--c-surface-3) 0%, var(--c-bg) 70%)' : 'var(--c-bg)' }}
         >
-            <div className="flex-1 flex flex-col justify-center items-center z-10 w-full max-w-sm">
+            <div className="flex-1 flex flex-col justify-end pb-8 items-center z-10 w-full max-w-sm">
                 <Shield size={80} className="text-primary mb-6 animate-pulse" style={{ fill: 'var(--c-primary-subtle)' }} />
-                <h1 className="font-display text-5xl font-bold text-white mb-2 tracking-tight">SHEild</h1>
-                <p className="text-[18px] text-text-2 mb-16 text-center">Your Digital Bodyguard</p>
+                <h1 className="text-6xl font-bold text-white mb-2 tracking-wide" style={{ fontFamily: "'Outfit', sans-serif" }}>SHEild</h1>
+                <p className="text-[18px] text-text-2 text-center">Your Digital Bodyguard</p>
             </div>
 
             <div className="w-full max-w-sm flex flex-col gap-4 pb-12 z-10">

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface SosState {
     sosActive: boolean;
@@ -15,7 +16,9 @@ interface SosState {
     setPoliceNumber: (v: string) => void;
 }
 
-export const useSosStore = create<SosState>((set) => ({
+export const useSosStore = create<SosState>()(
+    persist(
+        (set) => ({
     sosActive: false,
     bodyguardActive: false,
     recordingActive: false,
@@ -28,4 +31,16 @@ export const useSosStore = create<SosState>((set) => ({
     setRecordingActive: (recordingActive) => set({ recordingActive }),
     setAutoCallPolice: (autoCallPolice) => set({ autoCallPolice }),
     setPoliceNumber: (policeNumber) => set({ policeNumber: policeNumber || "100" }),
-}));
+        }),
+        {
+            name: "sheild-sos-storage",
+            partialize: (state) => ({
+                bodyguardActive: state.bodyguardActive,
+                sosActive: state.sosActive,
+                sessionId: state.sessionId,
+                autoCallPolice: state.autoCallPolice,
+                policeNumber: state.policeNumber
+            }),
+        }
+    )
+);

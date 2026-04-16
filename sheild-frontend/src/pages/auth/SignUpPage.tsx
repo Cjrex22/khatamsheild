@@ -49,7 +49,7 @@ export default function SignUpPage() {
                 <Link to="/auth/welcome" className="p-2 -ml-2 text-text-2 hover:text-white rounded-full">
                     <ArrowLeft size={24} />
                 </Link>
-                <h1 className="font-display text-2xl font-bold ml-2">Create Account</h1>
+                <h1 className="text-2xl font-bold ml-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, letterSpacing: '-0.02em' }}>Create Account</h1>
             </div>
 
             <form onSubmit={handleSignUp} className="flex flex-col gap-6 flex-1">

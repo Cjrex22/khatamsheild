@@ -53,6 +53,11 @@ function App() {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
+    
+    // Check if the global script caught it before React loaded
+    if ((window as any).deferredPwaPrompt) {
+        setDeferredPrompt((window as any).deferredPwaPrompt);
+    }
 
     const handleAppInstalled = () => {
       setInstalled(true);
