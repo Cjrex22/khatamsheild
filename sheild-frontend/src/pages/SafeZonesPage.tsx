@@ -1,6 +1,5 @@
-// NOTE: The Google Cloud project must have "Places API (New)" enabled.
-// This component uses POST https://places.googleapis.com/v1/places:searchNearby
-// API key is read from VITE_GOOGLE_PLACES_API_KEY — never hardcoded.
+// Safe Zones — uses Overpass API (OpenStreetMap) for free nearby place search.
+// No API key required. Falls back between multiple Overpass servers for reliability.
 
 import { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +7,6 @@ import {
     RefreshCw, List, Map as MapIcon, AlertCircle, ArrowLeft, Clock, Phone
 } from 'lucide-react';
 
-// ─── Lazy Leaflet (reuses same chunking as Map tab) ─────────────────────────
 const SafeZonesMap = lazy(() => import('../components/SafeZonesMap'));
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -49,80 +47,79 @@ const HELPLINES: PlaceResult[] = [
     { id: 'hl-5', name: 'Domestic Violence',  phone: '181',  category: 'helpline', address: 'Women Helpline for Domestic Abuse',lat: 0, lng: 0, distanceKm: 0, openNow: true, googleMapsUri: null, rating: null },
 ];
 
-// ─── Google Places API fetch ────────────────────────────────────────────────
-const PLACES_ENDPOINT = 'https://places.googleapis.com/v1/places:searchNearby';
-const FIELD_MASK = [
-    'places.displayName', 'places.formattedAddress', 'places.location',
-    'places.nationalPhoneNumber', 'places.internationalPhoneNumber',
-    'places.googleMapsUri', 'places.types', 'places.rating',
-    'places.businessStatus', 'places.currentOpeningHours',
-].join(',');
+// ─── Overpass API (free, no key) ────────────────────────────────────────────
+const OVERPASS_SERVERS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
 
-async function fetchPlaces(
-    lat: number, lng: number,
-    includedTypes: string[],
-    category: 'police' | 'hospital'
-): Promise<PlaceResult[]> {
-    const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
-    if (!apiKey) {
-        console.error('[SafeZones] VITE_GOOGLE_PLACES_API_KEY is not set. Cannot fetch places.');
-        return [];
-    }
+function buildOverpassQuery(lat: number, lng: number, amenityTypes: string[], radius: number = 10000): string {
+    const filters = amenityTypes.map(t => `node["amenity"="${t}"](around:${radius},${lat},${lng});way["amenity"="${t}"](around:${radius},${lat},${lng});`).join('\n');
+    return `[out:json][timeout:15];(\n${filters}\n);out center body;`;
+}
 
-    const body = {
-        includedTypes,
-        maxResultCount: 20,
-        locationRestriction: {
-            circle: {
-                center: { latitude: lat, longitude: lng },
-                radius: 10000,
-            },
-        },
-    };
-
-    try {
-        const res = await fetch(PLACES_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Goog-Api-Key': apiKey,
-                'X-Goog-FieldMask': FIELD_MASK,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!res.ok) {
-            const errText = await res.text().catch(() => '');
-            console.error(`[SafeZones] Places API error (${res.status}):`, errText);
-            return [];
+async function queryOverpass(query: string): Promise<any[]> {
+    for (const server of OVERPASS_SERVERS) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            const res = await fetch(server, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'data=' + encodeURIComponent(query),
+                signal: controller.signal,
+            });
+            clearTimeout(timeout);
+            if (!res.ok) continue;
+            const json = await res.json();
+            return json.elements ?? [];
+        } catch (e) {
+            console.warn(`[SafeZones] Overpass server ${server} failed:`, e);
+            continue;
         }
+    }
+    return [];
+}
 
-        const json = await res.json();
-        const places: any[] = json.places ?? [];
+function parseOverpassResults(
+    elements: any[],
+    userLat: number, userLng: number,
+    category: 'police' | 'hospital'
+): PlaceResult[] {
+    return elements
+        .map((el: any, i: number) => {
+            const lat = el.lat ?? el.center?.lat;
+            const lng = el.lon ?? el.center?.lon;
+            if (!lat || !lng) return null;
 
-        return places.map((p: any, i: number) => {
-            const plLat = p.location?.latitude ?? 0;
-            const plLng = p.location?.longitude ?? 0;
-            const dist = haversineKm(lat, lng, plLat, plLng);
+            const tags = el.tags ?? {};
+            const name = tags.name || tags['name:en'] || (category === 'police' ? 'Police Station' : 'Hospital');
+            const phone = tags.phone || tags['contact:phone'] || tags['phone:mobile'] || null;
+
+            const addressParts = [tags['addr:street'], tags['addr:city'], tags['addr:state']].filter(Boolean);
+            const address = addressParts.length > 0 ? addressParts.join(', ') : (tags['addr:full'] || null);
+
+            const dist = haversineKm(userLat, userLng, lat, lng);
+            const mapsUri = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 
             return {
-                id: `${category}-${i}`,
-                name: p.displayName?.text ?? 'Unknown',
-                address: p.formattedAddress ?? null,
-                phone: p.nationalPhoneNumber ?? p.internationalPhoneNumber ?? null,
-                lat: plLat,
-                lng: plLng,
+                id: `${category}-${el.id || i}`,
+                name,
+                address,
+                phone,
+                lat,
+                lng,
                 distanceKm: Math.round(dist * 10) / 10,
-                openNow: p.currentOpeningHours?.openNow ?? null,
-                googleMapsUri: p.googleMapsUri ?? null,
+                openNow: null,
+                googleMapsUri: mapsUri,
                 category,
-                rating: p.rating ?? null,
-            };
-        }).sort((a, b) => a.distanceKm - b.distanceKm);
-    } catch (err) {
-        console.error('[SafeZones] Network error fetching places:', err);
-        return [];
-    }
+                rating: null,
+            } as PlaceResult;
+        })
+        .filter((p): p is PlaceResult => p !== null)
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, 20);
 }
 
 // ─── Card icons ─────────────────────────────────────────────────────────────
@@ -157,12 +154,10 @@ function PlaceCard({ place }: { place: PlaceResult }) {
             className="bg-surface rounded-2xl border border-border overflow-hidden shadow-sm cursor-pointer hover:border-white/10 transition-colors active:scale-[0.98]"
         >
             <div className="p-4 flex items-start gap-3">
-                {/* Icon circle */}
                 <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg border ${cfg.bgClass} ${cfg.borderClass}`}>
                     {cfg.emoji}
                 </div>
 
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                     <h3 className="text-white font-bold text-[15px] leading-tight truncate">{place.name}</h3>
                     {place.address && (
@@ -187,7 +182,6 @@ function PlaceCard({ place }: { place: PlaceResult }) {
                     </div>
                 </div>
 
-                {/* Call button */}
                 {place.phone && (
                     <button
                         onClick={handleCall}
@@ -213,6 +207,7 @@ export default function SafeZonesPage() {
     const [userLocation, setUserLocation]       = useState<{ lat: number; lng: number } | null>(null);
     const [locationStatus, setLocationStatus]   = useState<'loading' | 'success' | 'denied'>('loading');
     const [refreshKey, setRefreshKey]           = useState(0);
+    const [apiWarning, setApiWarning]           = useState<string | null>(null);
 
     // ── Computed ────────────────────────────────────────────────────────
     const allPlaces = useMemo(() => {
@@ -220,7 +215,6 @@ export default function SafeZonesPage() {
         if (activeFilter === 'ALL' || activeFilter === 'POLICE')   mapped.push(...policeResults);
         if (activeFilter === 'ALL' || activeFilter === 'HOSPITAL') mapped.push(...hospitalResults);
         if (activeFilter === 'ALL' || activeFilter === 'HELPLINE') mapped.push(...HELPLINES);
-        // helplines always at bottom when mixed, otherwise sort by distance
         if (activeFilter === 'ALL') {
             const api = mapped.filter(p => p.category !== 'helpline').sort((a, b) => a.distanceKm - b.distanceKm);
             const hl  = mapped.filter(p => p.category === 'helpline');
@@ -237,24 +231,30 @@ export default function SafeZonesPage() {
         HELPLINE: 5,
     }), [policeResults, hospitalResults]);
 
-    // ── Fetch places ────────────────────────────────────────────────────
-    const [apiWarning, setApiWarning] = useState<string | null>(null);
-
+    // ── Fetch places via Overpass ────────────────────────────────────────
     const fetchAllPlaces = useCallback(async (lat: number, lng: number) => {
         setLoading(true);
         setError(null);
         setApiWarning(null);
         try {
-            const [police, hospitals] = await Promise.all([
-                fetchPlaces(lat, lng, ['police'], 'police'),
-                fetchPlaces(lat, lng, ['hospital', 'doctor', 'medical_lab', 'pharmacy'], 'hospital'),
+            const policeQuery = buildOverpassQuery(lat, lng, ['police']);
+            const hospitalQuery = buildOverpassQuery(lat, lng, ['hospital', 'clinic', 'pharmacy', 'doctors']);
+
+            const [policeRaw, hospitalRaw] = await Promise.all([
+                queryOverpass(policeQuery),
+                queryOverpass(hospitalQuery),
             ]);
+
+            const police = parseOverpassResults(policeRaw, lat, lng, 'police');
+            const hospitals = parseOverpassResults(hospitalRaw, lat, lng, 'hospital');
+
             setPoliceResults(police);
             setHospitalResults(hospitals);
             if (police.length === 0 && hospitals.length === 0) {
-                setApiWarning('No nearby police stations or hospitals found. Helplines are still available below.');
+                setApiWarning('No nearby police stations or hospitals found in OpenStreetMap data. Helplines are still available below.');
             }
-        } catch {
+        } catch (e) {
+            console.error('[SafeZones] Fetch error:', e);
             setApiWarning('Could not load nearby places. Helplines are still available below.');
         } finally {
             setLoading(false);
@@ -293,10 +293,10 @@ export default function SafeZonesPage() {
         setPoliceResults([]);
         setHospitalResults([]);
         setError(null);
+        setApiWarning(null);
         setRefreshKey(k => k + 1);
     };
 
-    // ── Filter chips ────────────────────────────────────────────────────
     const FILTERS: { key: FilterType; label: string }[] = [
         { key: 'ALL',      label: 'All' },
         { key: 'POLICE',   label: 'Police' },
@@ -382,7 +382,7 @@ export default function SafeZonesPage() {
                 </div>
             )}
 
-            {/* EMPTY FILTER (has results but not in this category) */}
+            {/* EMPTY FILTER */}
             {!loading && allPlaces.length === 0 && activeFilter !== 'ALL' && activeFilter !== 'HELPLINE' && (
                 <div className="flex flex-col items-center justify-center h-48 px-6 text-center">
                     <p className="text-text-2">No {activeFilter.toLowerCase()} locations found within 10 km.</p>
@@ -393,7 +393,6 @@ export default function SafeZonesPage() {
             {/* LIST VIEW */}
             {!loading && locationStatus === 'success' && allPlaces.length > 0 && viewMode === 'list' && (
                 <div className="px-4 space-y-3 pt-2">
-                    {/* API warning banner (non-blocking) */}
                     {apiWarning && (
                         <div className="flex items-center gap-2 bg-warning/10 border border-warning/20 rounded-xl px-3 py-2 mb-1">
                             <AlertCircle size={14} className="text-warning flex-shrink-0" />
