@@ -1,151 +1,313 @@
-import { useState, useEffect, useMemo, Suspense, lazy } from 'react';
+// NOTE: The Google Cloud project must have "Places API (New)" enabled.
+// This component uses POST https://places.googleapis.com/v1/places:searchNearby
+// API key is read from VITE_GOOGLE_PLACES_API_KEY — never hardcoded.
+
+import { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    ShieldCheck, Building2, Heart, Navigation, Phone,
-    MapPin, RefreshCw, List, Map as MapIcon, AlertCircle, ArrowLeft, Clock
+    RefreshCw, List, Map as MapIcon, AlertCircle, ArrowLeft, Clock, Phone
 } from 'lucide-react';
-import { api } from '../lib/api';
 
-const LeafletMapComponent = lazy(() => import('../components/LeafletMapComponent'));
+// ─── Lazy Leaflet (reuses same chunking as Map tab) ─────────────────────────
+const SafeZonesMap = lazy(() => import('../components/SafeZonesMap'));
 
-interface SafeZone {
+// ─── Types ──────────────────────────────────────────────────────────────────
+interface PlaceResult {
     id: string;
     name: string;
-    type: 'POLICE' | 'HOSPITAL' | 'HELPLINE';
     address: string | null;
     phone: string | null;
     lat: number;
     lng: number;
     distanceKm: number;
-    openNow: boolean;
-    mapsLink: string;
-    directionsLink: string;
+    openNow: boolean | null;
+    googleMapsUri: string | null;
+    category: 'police' | 'hospital' | 'helpline';
+    rating: number | null;
 }
 
 type FilterType = 'ALL' | 'POLICE' | 'HOSPITAL' | 'HELPLINE';
 
-const TYPE_CONFIG = {
-    POLICE:   { label: 'Police Station',    Icon: ShieldCheck, badgeClass: 'bg-blue-500/15 text-blue-400 border border-blue-500/30'    },
-    HOSPITAL: { label: 'Hospital',          Icon: Building2,   badgeClass: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
-    HELPLINE: { label: "Women's Centre",    Icon: Heart,       badgeClass: 'bg-purple-500/15 text-purple-400 border border-purple-500/30'  },
+// ─── Haversine distance (km) ────────────────────────────────────────────────
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2
+            + Math.cos(lat1 * Math.PI / 180)
+            * Math.cos(lat2 * Math.PI / 180)
+            * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── Static helplines ───────────────────────────────────────────────────────
+const HELPLINES: PlaceResult[] = [
+    { id: 'hl-1', name: 'Women Helpline',     phone: '1091', category: 'helpline', address: 'National Women Helpline — India', lat: 0, lng: 0, distanceKm: 0, openNow: true, googleMapsUri: null, rating: null },
+    { id: 'hl-2', name: 'Police Emergency',   phone: '100',  category: 'helpline', address: 'Police Control Room — India',    lat: 0, lng: 0, distanceKm: 0, openNow: true, googleMapsUri: null, rating: null },
+    { id: 'hl-3', name: 'Ambulance',          phone: '108',  category: 'helpline', address: 'Emergency Medical Services',      lat: 0, lng: 0, distanceKm: 0, openNow: true, googleMapsUri: null, rating: null },
+    { id: 'hl-4', name: 'National Emergency', phone: '112',  category: 'helpline', address: 'Unified Emergency Number — India',lat: 0, lng: 0, distanceKm: 0, openNow: true, googleMapsUri: null, rating: null },
+    { id: 'hl-5', name: 'Domestic Violence',  phone: '181',  category: 'helpline', address: 'Women Helpline for Domestic Abuse',lat: 0, lng: 0, distanceKm: 0, openNow: true, googleMapsUri: null, rating: null },
+];
+
+// ─── Google Places API fetch ────────────────────────────────────────────────
+const PLACES_ENDPOINT = 'https://places.googleapis.com/v1/places:searchNearby';
+const FIELD_MASK = [
+    'places.displayName', 'places.formattedAddress', 'places.location',
+    'places.nationalPhoneNumber', 'places.internationalPhoneNumber',
+    'places.googleMapsUri', 'places.types', 'places.rating',
+    'places.businessStatus', 'places.currentOpeningHours',
+].join(',');
+
+async function fetchPlaces(
+    lat: number, lng: number,
+    includedTypes: string[],
+    category: 'police' | 'hospital'
+): Promise<PlaceResult[]> {
+    const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+        console.error('[SafeZones] VITE_GOOGLE_PLACES_API_KEY is not set. Cannot fetch places.');
+        return [];
+    }
+
+    const body = {
+        includedTypes,
+        maxResultCount: 20,
+        locationRestriction: {
+            circle: {
+                center: { latitude: lat, longitude: lng },
+                radius: 10000,
+            },
+        },
+    };
+
+    try {
+        const res = await fetch(PLACES_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': apiKey,
+                'X-Goog-FieldMask': FIELD_MASK,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+            const errText = await res.text().catch(() => '');
+            console.error(`[SafeZones] Places API error (${res.status}):`, errText);
+            return [];
+        }
+
+        const json = await res.json();
+        const places: any[] = json.places ?? [];
+
+        return places.map((p: any, i: number) => {
+            const plLat = p.location?.latitude ?? 0;
+            const plLng = p.location?.longitude ?? 0;
+            const dist = haversineKm(lat, lng, plLat, plLng);
+
+            return {
+                id: `${category}-${i}`,
+                name: p.displayName?.text ?? 'Unknown',
+                address: p.formattedAddress ?? null,
+                phone: p.nationalPhoneNumber ?? p.internationalPhoneNumber ?? null,
+                lat: plLat,
+                lng: plLng,
+                distanceKm: Math.round(dist * 10) / 10,
+                openNow: p.currentOpeningHours?.openNow ?? null,
+                googleMapsUri: p.googleMapsUri ?? null,
+                category,
+                rating: p.rating ?? null,
+            };
+        }).sort((a, b) => a.distanceKm - b.distanceKm);
+    } catch (err) {
+        console.error('[SafeZones] Network error fetching places:', err);
+        return [];
+    }
+}
+
+// ─── Card icons ─────────────────────────────────────────────────────────────
+const CATEGORY_CONFIG = {
+    police:   { emoji: '🚓', bgClass: 'bg-blue-500/15',    borderClass: 'border-blue-500/30'    },
+    hospital: { emoji: '🏥', bgClass: 'bg-emerald-500/15', borderClass: 'border-emerald-500/30' },
+    helpline: { emoji: '📞', bgClass: 'bg-red-500/15',     borderClass: 'border-red-500/30'     },
 };
 
-function SafeZoneCard({ zone }: { zone: SafeZone }) {
-    const cfg = TYPE_CONFIG[zone.type];
-    const Icon = cfg.Icon;
+// ─── Place Card ─────────────────────────────────────────────────────────────
+function PlaceCard({ place }: { place: PlaceResult }) {
+    const cfg = CATEGORY_CONFIG[place.category];
+
+    const handleCardClick = () => {
+        if (place.category === 'helpline') {
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(place.name)}+India`, '_blank');
+        } else if (place.googleMapsUri) {
+            window.open(place.googleMapsUri, '_blank');
+        }
+    };
+
+    const handleCall = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (place.phone) {
+            window.location.href = `tel:${place.phone.replace(/\s/g, '')}`;
+        }
+    };
+
     return (
-        <div className="bg-surface rounded-2xl border border-border overflow-hidden shadow-sm">
-            <div className="p-4">
-                <div className="flex items-center gap-2">
-                    <div className={`flex items-center justify-center border rounded-full px-2 py-0.5 text-xs font-medium ${cfg.badgeClass}`}>
-                        <Icon size={12} className="mr-1" />
-                        {cfg.label}
-                    </div>
-                    <div className="flex-1" />
-                    <div className="bg-surface-2 text-text-3 rounded-full px-2 py-0.5 text-xs font-mono">
-                        {zone.distanceKm < 1 ? `${Math.round(zone.distanceKm * 1000)} m` : `${zone.distanceKm.toFixed(2)} km`}
-                    </div>
-                    {zone.openNow && (
-                        <div className="bg-safe/20 text-safe rounded-full px-2 py-0.5 text-xs font-medium">
-                            Open
-                        </div>
-                    )}
+        <div
+            onClick={handleCardClick}
+            className="bg-surface rounded-2xl border border-border overflow-hidden shadow-sm cursor-pointer hover:border-white/10 transition-colors active:scale-[0.98]"
+        >
+            <div className="p-4 flex items-start gap-3">
+                {/* Icon circle */}
+                <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg border ${cfg.bgClass} ${cfg.borderClass}`}>
+                    {cfg.emoji}
                 </div>
-                <h3 className="text-white font-bold text-base mt-2 leading-tight">{zone.name}</h3>
-                {zone.address && (
-                    <div className="flex items-start gap-1 mt-1 text-text-3">
-                        <MapPin size={12} className="mt-0.5 flex-shrink-0" />
-                        <span className="text-xs leading-tight line-clamp-1">{zone.address}</span>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-bold text-[15px] leading-tight truncate">{place.name}</h3>
+                    {place.address && (
+                        <p className="text-text-3 text-xs mt-0.5 truncate">{place.address}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-1.5">
+                        {place.category !== 'helpline' && (
+                            <span className="text-text-3 text-xs">{place.distanceKm} km away</span>
+                        )}
+                        {place.openNow === true && (
+                            <span className="flex items-center gap-1 text-xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                                <span className="text-green-400">Open</span>
+                            </span>
+                        )}
+                        {place.openNow === false && (
+                            <span className="flex items-center gap-1 text-xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
+                                <span className="text-red-400">Closed</span>
+                            </span>
+                        )}
                     </div>
-                )}
-            </div>
-            <div className="border-t border-border flex">
-                {zone.phone && (
-                    <button 
-                        onClick={() => { window.location.href = 'tel:' + zone.phone!.replace(/\s/g, ''); }}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 text-safe font-medium text-sm hover:bg-safe/10 active:bg-safe/20 transition-colors"
+                </div>
+
+                {/* Call button */}
+                {place.phone && (
+                    <button
+                        onClick={handleCall}
+                        className="flex-shrink-0 w-10 h-10 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 hover:bg-rose-500/25 active:scale-90 transition-all"
                     >
-                        <Phone size={14} /> Call
+                        <Phone size={16} />
                     </button>
                 )}
-                <button 
-                    onClick={() => window.open(zone.directionsLink, '_blank', 'noopener,noreferrer')}
-                    className={`${zone.phone ? 'flex-1 border-l border-border' : 'w-full'} flex items-center justify-center gap-2 py-3 text-primary font-medium text-sm hover:bg-primary/10 active:bg-primary/20 transition-colors`}
-                >
-                    <Navigation size={14} /> Directions
-                </button>
             </div>
         </div>
     );
 }
 
+// ─── Main Page ──────────────────────────────────────────────────────────────
 export default function SafeZonesPage() {
     const navigate = useNavigate();
-    const [zones, setZones] = useState<SafeZone[]>([]);
-    const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
-    const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-    const [locationStatus, setLocationStatus] = useState<'loading' | 'success' | 'error'>('loading');
-    const [refreshKey, setRefreshKey] = useState(0);
+    const [policeResults, setPoliceResults]     = useState<PlaceResult[]>([]);
+    const [hospitalResults, setHospitalResults] = useState<PlaceResult[]>([]);
+    const [activeFilter, setActiveFilter]       = useState<FilterType>('ALL');
+    const [viewMode, setViewMode]               = useState<'list' | 'map'>('list');
+    const [loading, setLoading]                 = useState(true);
+    const [error, setError]                     = useState<string | null>(null);
+    const [userLocation, setUserLocation]       = useState<{ lat: number; lng: number } | null>(null);
+    const [locationStatus, setLocationStatus]   = useState<'loading' | 'success' | 'denied'>('loading');
+    const [refreshKey, setRefreshKey]           = useState(0);
 
-    const filteredZones = useMemo(() =>
-        activeFilter === 'ALL' ? zones : zones.filter(z => z.type === activeFilter),
-    [zones, activeFilter]);
+    // ── Computed ────────────────────────────────────────────────────────
+    const allPlaces = useMemo(() => {
+        const mapped: PlaceResult[] = [];
+        if (activeFilter === 'ALL' || activeFilter === 'POLICE')   mapped.push(...policeResults);
+        if (activeFilter === 'ALL' || activeFilter === 'HOSPITAL') mapped.push(...hospitalResults);
+        if (activeFilter === 'ALL' || activeFilter === 'HELPLINE') mapped.push(...HELPLINES);
+        // helplines always at bottom when mixed, otherwise sort by distance
+        if (activeFilter === 'ALL') {
+            const api = mapped.filter(p => p.category !== 'helpline').sort((a, b) => a.distanceKm - b.distanceKm);
+            const hl  = mapped.filter(p => p.category === 'helpline');
+            return [...api, ...hl];
+        }
+        if (activeFilter === 'HELPLINE') return HELPLINES;
+        return mapped.sort((a, b) => a.distanceKm - b.distanceKm);
+    }, [policeResults, hospitalResults, activeFilter]);
 
     const counts = useMemo(() => ({
-        ALL:      zones.length,
-        POLICE:   zones.filter(z => z.type === 'POLICE').length,
-        HOSPITAL: zones.filter(z => z.type === 'HOSPITAL').length,
-        HELPLINE: zones.filter(z => z.type === 'HELPLINE').length,
-    }), [zones]);
+        ALL:      policeResults.length + hospitalResults.length + 5,
+        POLICE:   policeResults.length,
+        HOSPITAL: hospitalResults.length,
+        HELPLINE: 5,
+    }), [policeResults, hospitalResults]);
 
-    const fetchZones = async (lat: number, lng: number) => {
+    // ── Fetch places ────────────────────────────────────────────────────
+    const fetchAllPlaces = useCallback(async (lat: number, lng: number) => {
         setLoading(true);
         setError(null);
         try {
-            const data = await api.get(`/safe-zones/nearby?lat=${lat}&lng=${lng}&radiusMeters=5000`);
-            setZones(Array.isArray(data) ? data : []);
+            const [police, hospitals] = await Promise.all([
+                fetchPlaces(lat, lng, ['police'], 'police'),
+                fetchPlaces(lat, lng, ['hospital', 'doctor', 'medical_lab', 'pharmacy'], 'hospital'),
+            ]);
+            setPoliceResults(police);
+            setHospitalResults(hospitals);
+            if (police.length === 0 && hospitals.length === 0) {
+                setError('No places found nearby. Try increasing the search radius or check your connection.');
+            }
         } catch {
             setError('Could not load safe zones. Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
+    // ── Geolocation on mount ────────────────────────────────────────────
     useEffect(() => {
         if (!('geolocation' in navigator)) {
-            setLocationStatus('error');
+            setLocationStatus('denied');
             setError('Location services are not supported by your browser.');
             setLoading(false);
             return;
         }
         setLocationStatus('loading');
         setLoading(true);
+
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                 setUserLocation(loc);
                 setLocationStatus('success');
-                fetchZones(loc.lat, loc.lng);
+                fetchAllPlaces(loc.lat, loc.lng);
             },
             () => {
-                setLocationStatus('error');
+                setLocationStatus('denied');
                 setLoading(false);
-                setError('Location permission is required to find nearby safe zones. Please enable it and refresh.');
+                setError('Location access is needed to find safe zones near you. Please enable location in your browser settings.');
             },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshKey]);
 
+    const handleRetry = () => {
+        setPoliceResults([]);
+        setHospitalResults([]);
+        setError(null);
+        setRefreshKey(k => k + 1);
+    };
+
+    // ── Filter chips ────────────────────────────────────────────────────
     const FILTERS: { key: FilterType; label: string }[] = [
-        { key: 'ALL', label: 'All' },
-        { key: 'POLICE', label: 'Police' },
+        { key: 'ALL',      label: 'All' },
+        { key: 'POLICE',   label: 'Police' },
         { key: 'HOSPITAL', label: 'Hospital' },
         { key: 'HELPLINE', label: 'Helpline' },
     ];
+
+    // Map-only data (no helplines on map since they have no coordinates)
+    const mapPlaces = useMemo(() => {
+        const places: Array<PlaceResult & { category: 'police' | 'hospital' }> = [];
+        if (activeFilter === 'ALL' || activeFilter === 'POLICE')   places.push(...policeResults as Array<PlaceResult & { category: 'police' }>);
+        if (activeFilter === 'ALL' || activeFilter === 'HOSPITAL') places.push(...hospitalResults as Array<PlaceResult & { category: 'hospital' }>);
+        return places;
+    }, [policeResults, hospitalResults, activeFilter]);
 
     return (
         <div className="min-h-screen bg-bg pb-[96px] text-white">
@@ -159,32 +321,32 @@ export default function SafeZonesPage() {
                         <h1 className="font-display text-xl font-bold leading-tight">Safe Zones</h1>
                         {locationStatus === 'success' && !loading && (
                             <p className="text-xs text-text-3 font-medium flex items-center gap-1 mt-0.5">
-                                <Clock size={10} /> {counts.ALL} place{counts.ALL !== 1 ? 's' : ''} within 5 km
+                                <Clock size={10} /> {counts.ALL} place{counts.ALL !== 1 ? 's' : ''} within 10 km
                             </p>
                         )}
                     </div>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                     <div className="flex items-center bg-surface-2 rounded-xl p-0.5 border border-border">
-                        <button onClick={() => setViewMode('list')} className={`p-2 transition-colors ${viewMode === 'list' ? 'bg-primary text-white' : 'text-text-3'}`}>
+                        <button onClick={() => setViewMode('list')} className={`p-2 transition-colors rounded-lg ${viewMode === 'list' ? 'bg-primary text-white' : 'text-text-3'}`}>
                              <List size={18} />
                         </button>
-                        <button onClick={() => setViewMode('map')}  className={`p-2 transition-colors ${viewMode === 'map'  ? 'bg-primary text-white' : 'text-text-3'}`}>
+                        <button onClick={() => setViewMode('map')}  className={`p-2 transition-colors rounded-lg ${viewMode === 'map'  ? 'bg-primary text-white' : 'text-text-3'}`}>
                              <MapIcon size={18} />
                         </button>
                     </div>
-                    <button onClick={() => { setZones([]); setRefreshKey(k => k + 1); }} disabled={loading} className="p-2 text-text-3 hover:text-white hover:bg-white/5 rounded-xl transition-all disabled:opacity-40">
+                    <button onClick={handleRetry} disabled={loading} className="p-2 text-text-3 hover:text-white hover:bg-white/5 rounded-xl transition-all disabled:opacity-40">
                         <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
                     </button>
                 </div>
             </div>
 
-            {/* FILTERS */}
+            {/* FILTER CHIPS */}
             <div className="overflow-x-auto no-scrollbar">
                 <div className="px-4 py-3 flex gap-2 flex-shrink-0 min-w-max">
                     {FILTERS.map(f => (
-                        <button 
+                        <button
                             key={f.key}
                             onClick={() => setActiveFilter(f.key)}
                             className={`flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all ${activeFilter === f.key ? 'bg-primary text-white' : 'bg-surface text-text-2 border border-border'}`}>
@@ -194,6 +356,7 @@ export default function SafeZonesPage() {
                 </div>
             </div>
 
+            {/* LOADING */}
             {loading && (
                 <div className="flex flex-col items-center justify-center h-64 gap-4">
                     <RefreshCw className="animate-spin text-primary" size={32} />
@@ -203,54 +366,59 @@ export default function SafeZonesPage() {
                 </div>
             )}
 
-            {!loading && error && (
+            {/* LOCATION DENIED */}
+            {!loading && locationStatus === 'denied' && (
                 <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
                     <AlertCircle className="text-warning" size={32} />
                     <p className="text-text-2">{error}</p>
-                    <button 
-                        onClick={() => { setZones([]); setRefreshKey(k => k + 1); }}
+                    <button
+                        onClick={handleRetry}
+                        className="mt-2 bg-primary text-white rounded-xl px-6 py-2.5 font-medium text-sm active:scale-95 transition-transform">
+                        Retry
+                    </button>
+                </div>
+            )}
+
+            {/* API ERROR (location succeeded but fetch failed) */}
+            {!loading && locationStatus === 'success' && error && (
+                <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
+                    <AlertCircle className="text-warning" size={32} />
+                    <p className="text-text-2">{error}</p>
+                    <button
+                        onClick={handleRetry}
                         className="mt-2 bg-primary text-white rounded-xl px-6 py-2.5 font-medium text-sm active:scale-95 transition-transform">
                         Try Again
                     </button>
                 </div>
             )}
 
-            {!loading && !error && zones.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
-                    <ShieldCheck size={48} className="text-text-3 opacity-50" />
-                    <p className="text-lg font-bold text-white">No safe zones found nearby</p>
-                    <p className="text-text-3 text-sm">OpenStreetMap data may be sparse in your area.</p>
-                </div>
-            )}
-
-            {!loading && !error && zones.length > 0 && filteredZones.length === 0 && (
+            {/* EMPTY FILTER (has results but not in this category) */}
+            {!loading && !error && allPlaces.length === 0 && activeFilter !== 'ALL' && (
                 <div className="flex flex-col items-center justify-center h-48 px-6 text-center">
-                    <p className="text-text-2">No {activeFilter.toLowerCase()} locations found within 5 km.</p>
+                    <p className="text-text-2">No {activeFilter.toLowerCase()} locations found within 10 km.</p>
                     <button onClick={() => setActiveFilter('ALL')} className="text-primary text-sm font-medium mt-2">Show all ({counts.ALL})</button>
                 </div>
             )}
 
-            {!loading && !error && filteredZones.length > 0 && viewMode === 'list' && (
+            {/* LIST VIEW */}
+            {!loading && !error && allPlaces.length > 0 && viewMode === 'list' && (
                 <div className="px-4 space-y-3 pt-2">
                     <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-text-3 font-semibold px-1 mb-1">
                         <span>
-                        {filteredZones.length} place{filteredZones.length !== 1 ? 's' : ''} sorted by distance · Data from OpenStreetMap
+                            {allPlaces.length} place{allPlaces.length !== 1 ? 's' : ''} sorted by distance
                         </span>
                     </div>
-                    {filteredZones.map(zone => <SafeZoneCard key={zone.id} zone={zone} />)}
+                    {allPlaces.map(place => <PlaceCard key={place.id} place={place} />)}
                 </div>
             )}
 
+            {/* MAP VIEW */}
             {!loading && !error && viewMode === 'map' && (
                 <div className="h-[calc(100vh-160px)] relative">
                     <Suspense fallback={<div className="flex items-center justify-center h-full"><RefreshCw className="animate-spin text-primary" size={24} /> Loading map...</div>}>
-                        <LeafletMapComponent
-                            center={userLocation ? [userLocation.lat, userLocation.lng] : [20.5937, 78.9629]}
-                            zoom={userLocation ? 14 : 5}
-                            myLocation={userLocation}
-                            activeLocations={filteredZones.map(z => ({ id: z.id, lat: z.lat, lng: z.lng, name: z.name, type: z.type }))}
-                            triggerFocus={0}
-                            status={locationStatus === 'success' ? 'success' : 'error'}
+                        <SafeZonesMap
+                            userLocation={userLocation}
+                            places={mapPlaces}
                         />
                     </Suspense>
                 </div>
