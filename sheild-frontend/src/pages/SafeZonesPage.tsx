@@ -238,9 +238,12 @@ export default function SafeZonesPage() {
     }), [policeResults, hospitalResults]);
 
     // ── Fetch places ────────────────────────────────────────────────────
+    const [apiWarning, setApiWarning] = useState<string | null>(null);
+
     const fetchAllPlaces = useCallback(async (lat: number, lng: number) => {
         setLoading(true);
         setError(null);
+        setApiWarning(null);
         try {
             const [police, hospitals] = await Promise.all([
                 fetchPlaces(lat, lng, ['police'], 'police'),
@@ -249,10 +252,10 @@ export default function SafeZonesPage() {
             setPoliceResults(police);
             setHospitalResults(hospitals);
             if (police.length === 0 && hospitals.length === 0) {
-                setError('No places found nearby. Try increasing the search radius or check your connection.');
+                setApiWarning('No nearby police stations or hospitals found. Helplines are still available below.');
             }
         } catch {
-            setError('Could not load safe zones. Please check your connection and try again.');
+            setApiWarning('Could not load nearby places. Helplines are still available below.');
         } finally {
             setLoading(false);
         }
@@ -379,21 +382,8 @@ export default function SafeZonesPage() {
                 </div>
             )}
 
-            {/* API ERROR (location succeeded but fetch failed) */}
-            {!loading && locationStatus === 'success' && error && (
-                <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
-                    <AlertCircle className="text-warning" size={32} />
-                    <p className="text-text-2">{error}</p>
-                    <button
-                        onClick={handleRetry}
-                        className="mt-2 bg-primary text-white rounded-xl px-6 py-2.5 font-medium text-sm active:scale-95 transition-transform">
-                        Try Again
-                    </button>
-                </div>
-            )}
-
             {/* EMPTY FILTER (has results but not in this category) */}
-            {!loading && !error && allPlaces.length === 0 && activeFilter !== 'ALL' && (
+            {!loading && allPlaces.length === 0 && activeFilter !== 'ALL' && activeFilter !== 'HELPLINE' && (
                 <div className="flex flex-col items-center justify-center h-48 px-6 text-center">
                     <p className="text-text-2">No {activeFilter.toLowerCase()} locations found within 10 km.</p>
                     <button onClick={() => setActiveFilter('ALL')} className="text-primary text-sm font-medium mt-2">Show all ({counts.ALL})</button>
@@ -401,8 +391,16 @@ export default function SafeZonesPage() {
             )}
 
             {/* LIST VIEW */}
-            {!loading && !error && allPlaces.length > 0 && viewMode === 'list' && (
+            {!loading && locationStatus === 'success' && allPlaces.length > 0 && viewMode === 'list' && (
                 <div className="px-4 space-y-3 pt-2">
+                    {/* API warning banner (non-blocking) */}
+                    {apiWarning && (
+                        <div className="flex items-center gap-2 bg-warning/10 border border-warning/20 rounded-xl px-3 py-2 mb-1">
+                            <AlertCircle size={14} className="text-warning flex-shrink-0" />
+                            <p className="text-xs text-warning">{apiWarning}</p>
+                            <button onClick={handleRetry} className="ml-auto text-xs text-primary font-medium whitespace-nowrap">Retry</button>
+                        </div>
+                    )}
                     <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-text-3 font-semibold px-1 mb-1">
                         <span>
                             {allPlaces.length} place{allPlaces.length !== 1 ? 's' : ''} sorted by distance
@@ -413,7 +411,7 @@ export default function SafeZonesPage() {
             )}
 
             {/* MAP VIEW */}
-            {!loading && !error && viewMode === 'map' && (
+            {!loading && locationStatus === 'success' && viewMode === 'map' && (
                 <div className="h-[calc(100vh-160px)] relative">
                     <Suspense fallback={<div className="flex items-center justify-center h-full"><RefreshCw className="animate-spin text-primary" size={24} /> Loading map...</div>}>
                         <SafeZonesMap
